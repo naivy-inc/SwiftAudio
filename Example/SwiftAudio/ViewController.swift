@@ -21,12 +21,9 @@ class ViewController: UIViewController {
     @IBOutlet weak var elapsedTimeLabel: UILabel!
     @IBOutlet weak var titleLabel: UILabel!
     @IBOutlet weak var artistLabel: UILabel!
-    @IBOutlet weak var loadIndicator: UIActivityIndicatorView!
-    @IBOutlet weak var errorLabel: UILabel!
     
-    private var isScrubbing: Bool = false
-    private let controller = AudioController.shared
-    private var lastLoadFailed: Bool = false
+    var isScrubbing: Bool = false
+    let controller = AudioController.shared
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -35,23 +32,13 @@ class ViewController: UIViewController {
         controller.player.event.seek.addListener(self, handleAudioPlayerDidSeek)
         controller.player.event.updateDuration.addListener(self, handleAudioPlayerUpdateDuration)
         controller.player.event.didRecreateAVPlayer.addListener(self, handleAVPlayerRecreated)
-        controller.player.event.fail.addListener(self, handlePlayerFailure)
-        updateMetaData()
-        handleAudioPlayerStateChange(data: controller.player.playerState)
     }
     
     @IBAction func togglePlay(_ sender: Any) {
-        if !controller.audioSessionController.audioSessionIsActive {
+        if (!controller.audioSessionController.audioSessionIsActive) {
             try? controller.audioSessionController.activateSession()
         }
-        if lastLoadFailed, let item = controller.player.currentItem {
-            lastLoadFailed = false
-            errorLabel.isHidden = true
-            try? controller.player.load(item: item, playWhenReady: true)
-        }
-        else {
-            controller.player.togglePlaying()
-        }
+        controller.player.togglePlaying()
     }
     
     @IBAction func previous(_ sender: Any) {
@@ -97,31 +84,16 @@ class ViewController: UIViewController {
         playButton.setTitle(state == .playing ? "Pause" : "Play", for: .normal)
     }
     
-    func setErrorMessage(_ message: String) {
-        self.loadIndicator.stopAnimating()
-        errorLabel.isHidden = false
-        errorLabel.text = message
-    }
-    
     // MARK: - AudioPlayer Event Handlers
     
     func handleAudioPlayerStateChange(data: AudioPlayer.StateChangeEventData) {
-        print(data)
         DispatchQueue.main.async {
             self.setPlayButtonState(forAudioPlayerState: data)
             switch data {
-            case .loading:
-                self.loadIndicator.startAnimating()
-                self.updateMetaData()
-                self.updateTimeValues()
-            case .buffering:
-                self.loadIndicator.startAnimating()
             case .ready:
-                self.loadIndicator.stopAnimating()
                 self.updateMetaData()
                 self.updateTimeValues()
-            case .playing, .paused, .idle:
-                self.loadIndicator.stopAnimating()
+            case .loading, .playing, .paused, .idle:
                 self.updateTimeValues()
             }
         }
@@ -147,17 +119,6 @@ class ViewController: UIViewController {
     
     func handleAVPlayerRecreated() {
         try? controller.audioSessionController.set(category: .playback)
-    }
-    
-    func handlePlayerFailure(data: AudioPlayer.FailEventData) {
-        if let error = data as NSError? {
-            if error.code == -1009 {
-                lastLoadFailed = true
-                DispatchQueue.main.async {
-                    self.setErrorMessage("Network disconnected. Please try again...")
-                }
-            }
-        }
     }
     
 }

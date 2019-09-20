@@ -168,9 +168,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
     }
     
-    
-    
-    func load(from url: URL, playWhenReady: Bool) {
+    func load(from url: URL, playWhenReady: Bool, headers: [String: Any]? = nil) {
         reset(soft: true)
         _playWhenReady = playWhenReady
 
@@ -178,16 +176,15 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
             recreateAVPlayer()
         }
         
-        self._pendingAsset = AVURLAsset(url: url)
+        var options: [String: Any] = [:]
+        if let headers = headers {
+            options = ["AVURLAssetHTTPHeaderFieldsKey": headers]
+        }
         
+        // Set item
+        self._pendingAsset = AVURLAsset(url: url, options: options)
         if let pendingAsset = _pendingAsset {
-            self._state = .loading
-            pendingAsset.loadValuesAsynchronously(forKeys: [Constants.assetPlayableKey], completionHandler: { [weak self] in
-                
-                guard let self = self else {
-                    return
-                }
-                
+            pendingAsset.loadValuesAsynchronously(forKeys: [Constants.assetPlayableKey], completionHandler: {
                 var error: NSError? = nil
                 let status = pendingAsset.statusOfValue(forKey: Constants.assetPlayableKey, error: &error)
                 
@@ -209,6 +206,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                         break
                         
                     case .failed:
+                        // print("load asset failed")
                         if isPendingAsset {
                             self.delegate?.AVWrapper(failedWithError: error)
                             self._pendingAsset = nil
@@ -216,6 +214,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                         break
                         
                     case .cancelled:
+                        // print("load asset cancelled")
                         break
                         
                     default:
@@ -226,10 +225,10 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
     }
     
-    func load(from url: URL, playWhenReady: Bool, initialTime: TimeInterval?) {
+    func load(from url: URL, playWhenReady: Bool, initialTime: TimeInterval?, headers: [String: Any]?) {
         _initialTime = initialTime
         self.pause()
-        self.load(from: url, playWhenReady: playWhenReady)
+        self.load(from: url, playWhenReady: playWhenReady, headers: headers)
     }
     
     // MARK: - Util
@@ -239,8 +238,10 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         playerTimeObserver.unregisterForBoundaryTimeEvents()
         playerItemNotificationObserver.stopObservingCurrentItem()
         
-        self._pendingAsset?.cancelLoading()
-        self._pendingAsset = nil
+        if self._pendingAsset != nil {
+            self._pendingAsset?.cancelLoading()
+            self._pendingAsset = nil
+        }
         
         if !soft {
             avPlayer.replaceCurrentItem(with: nil)
@@ -273,7 +274,7 @@ extension AVPlayerWrapper: AVPlayerObserverDelegate {
                 self._state = .paused
             }
         case .waitingToPlayAtSpecifiedRate:
-            self._state = .buffering
+            self._state = .loading
         case .playing:
             self._state = .playing
         @unknown default:
@@ -285,16 +286,15 @@ extension AVPlayerWrapper: AVPlayerObserverDelegate {
         switch status {
             
         case .readyToPlay:
+            self._state = .ready
             
-            if _playWhenReady {
+            if let initialTime = _initialTime {
+                self.seek(to: initialTime)
+            }
+            else if _playWhenReady {
                 self.play()
             }
-            else {
-                self._state = .ready
-                if let initialTime = _initialTime {
-                    self.seek(to: initialTime)
-                }
-            }
+            
             break
             
         case .failed:
