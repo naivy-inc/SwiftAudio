@@ -171,7 +171,8 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
         }
 
         if (item is RemoteCommandable) {
-                      enableRemoteCommands(forItem: item)
+        enableRemoteCommands(forItem: item)
+        }
     }
 
     public func preload(item: AudioItem) {
@@ -361,3 +362,4 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
     }
 
 }
+
